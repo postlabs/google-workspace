@@ -10,8 +10,7 @@
     "workspace-server"
   ],
   "scripts": {
-    "prepare": "npm run build",
-    "build": "npm run build --workspaces --if-present",
+    "build": "cd workspace-server && node esbuild.config.js",
     "test": "npm run test --workspaces --if-present",
     "test:watch": "npm run test:watch --workspaces --if-present",
     "test:coverage": "npm run test:coverage --workspaces --if-present",

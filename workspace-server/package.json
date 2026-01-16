@@ -1,8 +1,11 @@
 {
-  "name": "workspace-server",
-  "version": "0.0.4",
-  "description": "",
+  "name": "@postlabs/google-workspace-mcp",
+  "version": "1.0.0",
+  "description": "Google Workspace MCP server (Gmail, Calendar, Drive) - bundled version",
   "main": "dist/index.js",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "test": "cd .. && node --max-old-space-size=4096 node_modules/jest/bin/jest.js --runInBand --verbose",
     "test:watch": "cd .. && jest --watch",
@@ -11,12 +14,23 @@
     "start": "ts-node src/index.ts",
     "clean": "rm -rf dist node_modules",
     "build": "node esbuild.config.js",
-    "build:auth-utils": "node esbuild.auth-utils.js"
+    "build:auth-utils": "node esbuild.auth-utils.js",
+    "prepublishOnly": "npm run build"
   },
-  "keywords": [],
-  "author": "Allen Hutchison",
+  "keywords": [
+    "mcp",
+    "google-workspace",
+    "gmail",
+    "calendar",
+    "drive"
+  ],
+  "author": "Postlabs",
   "license": "Apache-2.0",
   "type": "commonjs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/postlabs/google-workspace.git"
+  },
   "devDependencies": {
     "esbuild": "^0.27.2"
   }

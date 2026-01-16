@@ -4,7 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-const esbuild = require('esbuild');
+// Try local node_modules first, then parent
+let esbuild;
+try {
+  esbuild = require('esbuild');
+} catch {
+  esbuild = require('../node_modules/esbuild');
+}
 const path = require('node:path');
 const fs = require('node:fs');
 
@@ -22,10 +28,7 @@ async function build() {
       alias: {
         'open': path.resolve(__dirname, 'src/utils/open-wrapper.ts')
       },
-      // External packages that shouldn't be bundled
-      external: [
-        'jsdom'
-      ],
+      // Bundle all dependencies (no external packages)
       // Add a loader for .node files
       loader: {
         '.node': 'file'
