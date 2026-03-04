@@ -1,10 +1,11 @@
 {
-  "name": "@postlabs/google-workspace-mcp",
-  "version": "1.0.0",
+  "name": "@postlab/google-workspace-mcp",
+  "version": "1.0.4",
   "description": "Google Workspace MCP server (Gmail, Calendar, Drive) - bundled version",
   "main": "dist/index.js",
   "files": [
-    "dist"
+    "dist",
+    "!dist/*.map"
   ],
   "scripts": {
     "test": "cd .. && node --max-old-space-size=4096 node_modules/jest/bin/jest.js --runInBand --verbose",
