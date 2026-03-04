@@ -11,17 +11,12 @@ const axios = require('axios');
 const { URL } = require('node:url');
 
 // --- Configuration loaded from Environment Variables ---
-// These are set in the Google Cloud Function's configuration
+// These are set in the Google Cloud Function's configuration.
+// They may be absent on the initial deploy (before OAuth credentials exist)
+// and are set on the final deploy. Validation happens at request time.
 const CLIENT_ID = process.env.CLIENT_ID;
 const SECRET_NAME = process.env.SECRET_NAME;
 const REDIRECT_URI = process.env.REDIRECT_URI;
-
-// Fail fast if required environment variables are missing
-if (!CLIENT_ID || !SECRET_NAME || !REDIRECT_URI) {
-  throw new Error(
-    'Missing required environment variables: CLIENT_ID, SECRET_NAME, and REDIRECT_URI must be set.'
-  );
-}
 
 // --- Configuration for local storage (used in instructions) ---
 const KEYCHAIN_SERVICE_NAME = 'gemini-cli-workspace-oauth';
@@ -36,7 +31,6 @@ const secretClient = new SecretManagerServiceClient();
  */
 async function getClientSecret() {
   try {
-
     const [version] = await secretClient.accessSecretVersion({
       name: SECRET_NAME,
     });
@@ -65,70 +59,86 @@ async function handleCallback(req, res) {
 
   try {
     const clientSecret = await getClientSecret();
-    const tokenResponse = await axios.post('https://oauth2.googleapis.com/token', {
-      client_id: CLIENT_ID,
-      client_secret: clientSecret,
-      code: code,
-      grant_type: 'authorization_code',
-      redirect_uri: REDIRECT_URI,
-    });
+    const tokenResponse = await axios.post(
+      'https://oauth2.googleapis.com/token',
+      {
+        client_id: CLIENT_ID,
+        client_secret: clientSecret,
+        code: code,
+        grant_type: 'authorization_code',
+        redirect_uri: REDIRECT_URI,
+      },
+    );
 
-
-    const { access_token, refresh_token, expires_in, scope, token_type } = tokenResponse.data;
+    const { access_token, refresh_token, expires_in, scope, token_type } =
+      tokenResponse.data;
 
     // Calculate expiry_date (timestamp in milliseconds)
-    const expiry_date = Date.now() + (expires_in * 1000);
+    const expiry_date = Date.now() + expires_in * 1000;
 
     // If state is present, decode it and decide whether to redirect or show manual page.
     if (state) {
-        try {
-            // SECURITY: Enforce a reasonable size limit on the state parameter to prevent DoS.
-            if (state.length > 4096) {
-                throw new Error('State parameter exceeds size limit of 4KB.');
-            }
-
-            const payload = JSON.parse(Buffer.from(state, 'base64').toString('utf8'));
-
-            // If not in manual mode and a URI is present, perform the redirect.
-            if (payload && payload.manual === false && payload.uri) {
-                
-                const redirectUrl = new URL(payload.uri);
-
-                // SECURITY: Validate the redirect URI to prevent open redirect attacks.
-                if (redirectUrl.hostname !== 'localhost' && redirectUrl.hostname !== '127.0.0.1') {
-                    throw new Error(`Invalid redirect hostname: ${redirectUrl.hostname}. Must be localhost or 127.0.0.1.`);
-                }
-              
-                const finalUrl = redirectUrl; // Use the validated URL object
-                finalUrl.searchParams.append('access_token', access_token);
-                if (refresh_token) {
-                    finalUrl.searchParams.append('refresh_token', refresh_token);
-                }
-                finalUrl.searchParams.append('scope', scope);
-                finalUrl.searchParams.append('token_type', token_type);
-                finalUrl.searchParams.append('expiry_date', expiry_date.toString());
-
-                // SECURITY: Pass the CSRF token back to the client for validation.
-                if (payload.csrf) {
-                    finalUrl.searchParams.append('state', payload.csrf);
-                }
-                
-                return res.redirect(302, finalUrl.toString());
-            }
-        } catch (e) {
-            console.error('Error processing state or redirect. Falling back to manual page.', e);
+      try {
+        // SECURITY: Enforce a reasonable size limit on the state parameter to prevent DoS.
+        if (state.length > 4096) {
+          throw new Error('State parameter exceeds size limit of 4KB.');
         }
+
+        const payload = JSON.parse(
+          Buffer.from(state, 'base64').toString('utf8'),
+        );
+
+        // If not in manual mode and a URI is present, perform the redirect.
+        if (payload && payload.manual === false && payload.uri) {
+          const redirectUrl = new URL(payload.uri);
+
+          // SECURITY: Validate the redirect URI to prevent open redirect attacks.
+          if (
+            redirectUrl.hostname !== 'localhost' &&
+            redirectUrl.hostname !== '127.0.0.1'
+          ) {
+            throw new Error(
+              `Invalid redirect hostname: ${redirectUrl.hostname}. Must be localhost or 127.0.0.1.`,
+            );
+          }
+
+          const finalUrl = redirectUrl; // Use the validated URL object
+          finalUrl.searchParams.append('access_token', access_token);
+          if (refresh_token) {
+            finalUrl.searchParams.append('refresh_token', refresh_token);
+          }
+          finalUrl.searchParams.append('scope', scope);
+          finalUrl.searchParams.append('token_type', token_type);
+          finalUrl.searchParams.append('expiry_date', expiry_date.toString());
+
+          // SECURITY: Pass the CSRF token back to the client for validation.
+          if (payload.csrf) {
+            finalUrl.searchParams.append('state', payload.csrf);
+          }
+
+          return res.redirect(302, finalUrl.toString());
+        }
+      } catch (e) {
+        console.error(
+          'Error processing state or redirect. Falling back to manual page.',
+          e,
+        );
+      }
     }
 
     // --- Fallback to manual instructions ---
 
-    const credentialsJson = JSON.stringify({
+    const credentialsJson = JSON.stringify(
+      {
         refresh_token: refresh_token,
         scope: scope,
         token_type: token_type,
         access_token: access_token,
-        expiry_date: expiry_date
-    }, null, 2); // Pretty print JSON
+        expiry_date: expiry_date,
+      },
+      null,
+      2,
+    ); // Pretty print JSON
 
     // 4. Display the JSON and add a copy button + instructions
     res.set('Content-Type', 'text/html');
@@ -182,17 +192,25 @@ async function handleCallback(req, res) {
             <span id="copy-status">Copied!</span>
 
             <div class="instructions">
-              <h4>Keychain Storage Instructions:</h4>
-              <ol>
-                <li>Open your OS Keychain/Credential Manager.</li>
-                <li>Create a new secure entry (e.g., a "Generic Password" on macOS, a "Windows Credential", or similar on Linux).</li>
-                <li>Set the **Service** (or equivalent field) to: <code>${KEYCHAIN_SERVICE_NAME}</code></li>
-                <li>Set the **Account** (or username field) to: <code>${KEYCHAIN_ACCOUNT_NAME}</code></li>
-                <li>Paste the copied JSON into the **Password/Secret** field.</li>
-                <li>Save the entry.</li>
-              </ol>
-              <p>Your local MCP server will now be able to find and use these credentials automatically.</p>
-              <p><small>(If keychain is unavailable, the server falls back to an encrypted file, but keychain is recommended.)</small></p>
+              <h4>CLI Login (Recommended):</h4>
+              <p>In your terminal, run:</p>
+              <pre style="background:#eee;padding:0.75rem;border-radius:4px;overflow-x:auto;"><code>node dist/headless-login.js</code></pre>
+              <p>Then paste the JSON above when prompted. The CLI will securely store your credentials.</p>
+
+              <details style="margin-top: 1.5rem;">
+                <summary style="cursor:pointer;color:#555;"><strong>Advanced: Manual Keychain Storage</strong></summary>
+                <div style="margin-top: 0.5rem;">
+                  <ol>
+                    <li>Open your OS Keychain/Credential Manager.</li>
+                    <li>Create a new secure entry (e.g., a "Generic Password" on macOS, a "Windows Credential", or similar on Linux).</li>
+                    <li>Set the <strong>Service</strong> (or equivalent field) to: <code>${KEYCHAIN_SERVICE_NAME}</code></li>
+                    <li>Set the <strong>Account</strong> (or username field) to: <code>${KEYCHAIN_ACCOUNT_NAME}</code></li>
+                    <li>Paste the copied JSON into the <strong>Password/Secret</strong> field.</li>
+                    <li>Save the entry.</li>
+                  </ol>
+                  <p><small>(If keychain is unavailable, the server falls back to an encrypted file, but keychain is recommended.)</small></p>
+                </div>
+              </details>
             </div>
           </div>
 
@@ -240,14 +258,20 @@ async function handleCallback(req, res) {
         </body>
       </html>
     `);
-
   } catch (error) {
     if (axios.isAxiosError(error) && error.response) {
-       console.error('Error during token exchange:', error.response.data);
+      console.error('Error during token exchange:', error.response.data);
     } else {
-       console.error('Error during token exchange:', error instanceof Error ? error.message : error);
+      console.error(
+        'Error during token exchange:',
+        error instanceof Error ? error.message : error,
+      );
     }
-    res.status(500).send('An error occurred during the token exchange. Check function logs for details.');
+    res
+      .status(500)
+      .send(
+        'An error occurred during the token exchange. Check function logs for details.',
+      );
   }
 }
 
@@ -266,27 +290,30 @@ async function handleRefreshToken(req, res) {
 
   const { refresh_token } = req.body;
 
-  
   if (!refresh_token) {
     console.error('Missing refresh_token in request body');
-    return res.status(400).send('Error: Missing refresh_token in request body.');
+    return res
+      .status(400)
+      .send('Error: Missing refresh_token in request body.');
   }
 
   try {
     const clientSecret = await getClientSecret();
 
-    const tokenResponse = await axios.post('https://oauth2.googleapis.com/token', {
-      client_id: CLIENT_ID,
-      client_secret: clientSecret,
-      refresh_token: refresh_token,
-      grant_type: 'refresh_token',
-    });
-
+    const tokenResponse = await axios.post(
+      'https://oauth2.googleapis.com/token',
+      {
+        client_id: CLIENT_ID,
+        client_secret: clientSecret,
+        refresh_token: refresh_token,
+        grant_type: 'refresh_token',
+      },
+    );
 
     const { access_token, expires_in, scope, token_type } = tokenResponse.data;
 
     // Calculate expiry_date (timestamp in milliseconds)
-    const expiry_date = Date.now() + (expires_in * 1000);
+    const expiry_date = Date.now() + expires_in * 1000;
 
     // Return the new credentials
     // Note: Google does NOT return a new refresh_token on refresh
@@ -297,13 +324,15 @@ async function handleRefreshToken(req, res) {
       token_type,
       scope,
     });
-
   } catch (error) {
     if (axios.isAxiosError(error) && error.response) {
       console.error('Error during token refresh:', error.response.data);
       res.status(error.response.status).json(error.response.data);
     } else {
-      console.error('Error during token refresh:', error instanceof Error ? error.message : error);
+      console.error(
+        'Error during token refresh:',
+        error instanceof Error ? error.message : error,
+      );
       res.status(500).send('An error occurred during token refresh.');
     }
   }
@@ -314,8 +343,20 @@ async function handleRefreshToken(req, res) {
  * Routes requests to either the callback handler or the refresh handler.
  */
 functions.http('oauthHandler', async (req, res) => {
+  // Validate required environment variables at request time
+  if (!CLIENT_ID || !SECRET_NAME || !REDIRECT_URI) {
+    return res
+      .status(503)
+      .send(
+        'Function not yet configured. Missing required environment variables: CLIENT_ID, SECRET_NAME, REDIRECT_URI.',
+      );
+  }
+
   // Route to refresh handler if path ends with /refresh or /refreshToken or it's a POST with refresh_token
-  if (['/refresh', '/refreshToken'].includes(req.path) || (req.method === 'POST' && req.body?.refresh_token)) {
+  if (
+    ['/refresh', '/refreshToken'].includes(req.path) ||
+    (req.method === 'POST' && req.body?.refresh_token)
+  ) {
     return handleRefreshToken(req, res);
   }
 
@@ -325,5 +366,9 @@ functions.http('oauthHandler', async (req, res) => {
   }
 
   // Default/Error case
-  res.status(400).send('Unknown request type. Expected OAuth callback or token refresh request.');
+  res
+    .status(400)
+    .send(
+      'Unknown request type. Expected OAuth callback or token refresh request.',
+    );
 });

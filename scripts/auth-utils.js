@@ -4,7 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-const { OAuthCredentialStorage } = require('../workspace-server/dist/auth-utils.js');
+const {
+  OAuthCredentialStorage,
+} = require('../workspace-server/dist/auth-utils.js');
 
 async function clearAuth() {
   try {
@@ -23,7 +25,7 @@ async function expireToken() {
       console.log('ℹ️  No credentials found to expire.');
       return;
     }
-    
+
     // Set expiry to 1 second ago
     credentials.expiry_date = Date.now() - 1000;
     await OAuthCredentialStorage.saveCredentials(credentials);
@@ -42,16 +44,20 @@ async function showStatus() {
       console.log('ℹ️  No credentials found.');
       return;
     }
-    
+
     const now = Date.now();
     const expiry = credentials.expiry_date;
     const hasRefreshToken = !!credentials.refresh_token;
     const hasAccessToken = !!credentials.access_token;
     const isExpired = expiry ? expiry < now : false;
-    
+
     console.log('📊 Auth Status:');
-    console.log(`   Access Token: ${hasAccessToken ? '✅ Present' : '❌ Missing'}`);
-    console.log(`   Refresh Token: ${hasRefreshToken ? '✅ Present' : '❌ Missing'}`);
+    console.log(
+      `   Access Token: ${hasAccessToken ? '✅ Present' : '❌ Missing'}`,
+    );
+    console.log(
+      `   Refresh Token: ${hasRefreshToken ? '✅ Present' : '❌ Missing'}`,
+    );
     if (expiry) {
       console.log(`   Expiry: ${new Date(expiry).toISOString()}`);
       console.log(`   Status: ${isExpired ? '❌ EXPIRED' : '✅ Valid'}`);
@@ -68,6 +74,18 @@ async function showStatus() {
   }
 }
 
+async function login() {
+  try {
+    require('../workspace-server/dist/headless-login.js');
+  } catch (error) {
+    console.error(
+      '❌ Failed to load headless-login module. Run "npm run build:headless-login" first.',
+    );
+    console.error(error.message);
+    process.exit(1);
+  }
+}
+
 function showHelp() {
   console.log(`
 Auth Management CLI
@@ -75,12 +93,14 @@ Auth Management CLI
 Usage: node scripts/auth-utils.js <command>
 
 Commands:
+  login     Authenticate via headless OAuth flow (for SSH/WSL/Cloud Shell)
   clear     Clear all authentication credentials
   expire    Force the access token to expire (for testing refresh)
   status    Show current authentication status
   help      Show this help message
 
 Examples:
+  node scripts/auth-utils.js login
   node scripts/auth-utils.js clear
   node scripts/auth-utils.js expire
   node scripts/auth-utils.js status
@@ -91,6 +111,9 @@ async function main() {
   const command = process.argv[2];
 
   switch (command) {
+    case 'login':
+      await login();
+      break;
     case 'clear':
       await clearAuth();
       break;

@@ -26,12 +26,12 @@ async function build() {
       sourcemap: true,
       // Replace 'open' package with our wrapper
       alias: {
-        'open': path.resolve(__dirname, 'src/utils/open-wrapper.ts')
+        open: path.resolve(__dirname, 'src/utils/open-wrapper.ts'),
       },
       // Bundle all dependencies (no external packages)
       // Add a loader for .node files
       loader: {
-        '.node': 'file'
+        '.node': 'file',
       },
       // Make sure CommonJS modules work properly
       format: 'cjs',

@@ -5,22 +5,24 @@ module.exports = {
   projects: [
     {
       displayName: 'workspace-server',
-      testMatch: ['<rootDir>/workspace-server/src/**/*.test.ts', '<rootDir>/workspace-server/src/**/*.spec.ts'],
-      transform: {
-        '^.+\\.ts$': ['ts-jest', {
-          tsconfig: {
-            strict: false
-          }
-        }],
-      },
-      transformIgnorePatterns: [
-        'node_modules/(?!(marked)/)',
+      testMatch: [
+        '<rootDir>/workspace-server/src/**/*.test.ts',
+        '<rootDir>/workspace-server/src/**/*.spec.ts',
       ],
+      transform: {
+        '^.+\\.ts$': [
+          'ts-jest',
+          {
+            tsconfig: {
+              strict: false,
+            },
+          },
+        ],
+      },
+      transformIgnorePatterns: ['node_modules/'],
       moduleNameMapper: {
         '^@/(.*)$': '<rootDir>/workspace-server/src/$1',
         '\\.wasm$': '<rootDir>/workspace-server/src/__tests__/mocks/wasm.js',
-        '^marked$': '<rootDir>/workspace-server/src/__tests__/mocks/marked.js',
-        '^jsdom$': '<rootDir>/workspace-server/src/__tests__/mocks/jsdom.ts',
       },
       roots: ['<rootDir>/workspace-server/src'],
       setupFilesAfterEnv: ['<rootDir>/workspace-server/src/__tests__/setup.ts'],
@@ -40,7 +42,7 @@ module.exports = {
           statements: 60,
         },
       },
-    }
+    },
   ],
   coverageReporters: ['text', 'lcov', 'html'],
   testTimeout: 10000,
